@@ -1,2 +1,2 @@
 # bleardAI
-My working repo for setting up my local LLMs utilzing docker, open-webui, tailscale, and ollama.
+My working repo for configuring and deploying local LLMs utilzing docker, open-webui, tailscale, and ollama.
