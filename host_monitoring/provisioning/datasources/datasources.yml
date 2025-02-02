@@ -1,0 +1,13 @@
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    url: http://prometheus:9090
+    access: proxy
+    isDefault: true
+
+#  - name: GPU Exporter
+#    type: prometheus
+#    url: http://amd-smi-exporter:2021
+#    access: proxy
+#    isDefault: false
