@@ -1,0 +1,63 @@
+version: "3.9"  # Use a consistent version
+
+# Currently avoiding mergeing of namespaces.... as it does not seem to work for my use-case
+
+services:
+  ollama:
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    volumes:
+      - ollama:/root/.ollama
+    container_name: ollama
+    pull_policy: always
+    tty: true
+    restart: unless-stopped
+    image: ollama/ollama:${OLLAMA_DOCKER_TAG-rocm}
+    environment:
+      - 'HSA_OVERRIDE_GFX_VERSION=10.3.0'
+    network_mode: service:ts-proxy # Share namespace with ts-proxy
+
+  open-webui:
+    build:
+      context: .
+      args:
+        OLLAMA_BASE_URL: '/ollama'
+      dockerfile: Dockerfile
+    image: ghcr.io/open-webui/open-webui:${WEBUI_DOCKER_TAG-main}
+    container_name: open-webui
+    volumes:
+      - open-webui:/app/backend/data
+    depends_on:
+      - ollama
+    environment:
+      - 'OLLAMA_BASE_URL=http://localhost:11434' # Due to us combinng the network namespace we can find ollama on localhost. Future versions may want to re-consider how we are running this, previously we used "ollama" as theservice name will automatically default to the dns name within the docker network as well
+      - 'WEBUI_SECRET_KEY=' # TODO: Must get this
+    restart: unless-stopped
+    network_mode: service:ts-proxy # Share namespace with ts-proxy
+
+  ts-proxy:
+    image: tailscale/tailscale:latest
+    container_name: ts-proxy
+    hostname: bleardai
+    environment:
+      - TS_AUTHKEY=${TS_AUTH_KEY} # Replace with your actual key. TODO: use .env file
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=false # Important for device mapping
+      #- TS_EXTRA_ARGS=--advertise-tags=tag:my-apps # Add tags as needed
+      - TS_SERVE_CONFIG=/config/tailscale_serve.json # Path to your serve config
+    volumes:
+      - tailscale_data:/var/lib/tailscale
+      - ${PWD}/ts_config:/config
+    devices: # TODO: Should this actually be in volumes?
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN   # TODO: Review both these entries
+      - sys_module  # Dont think I need this one in-particular
+    restart: unless-stopped
+
+# Define data volumes - TODO: Is really this necessary?
+volumes:
+  ollama: {}
+  open-webui: {}
+  tailscale_data: {}
