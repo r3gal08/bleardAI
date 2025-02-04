@@ -1,3 +1,4 @@
 *.env
+*.env.anythingllm
 *.Archive
 *.security_policies
