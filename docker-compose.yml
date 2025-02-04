@@ -1,8 +1,22 @@
-version: "3.9"  # Use a consistent version
-
-# Currently avoiding mergeing of namespaces.... as it does not seem to work for my use-case
+---
 
 services:
+  tsdproxy:
+    image: almeidapaulopt/tsdproxy:latest
+    container_name: tsdproxy
+    #user: 0:0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # This is makes the container able to access the docker daemon itself and run docker commands. IE: You can execute docker command son the host machine.
+      - tsdproxydata:/data
+    environment:
+      # Get AuthKey from your Tailscale account
+      - TSDPROXY_AUTHKEY=${TS_AUTH_KEY}
+      # Address of docker server (access to example.com ports)
+      - TSDPROXY_HOSTNAME=10.42.37.238           # TODO: Might need to adjust this. Perhaps use 127.0.01 if they share a network namespace???
+      - DOCKER_HOST=unix:///var/run/docker.sock  # Unix is a form of inter-processor communication. This is the path to the docker unix socket file, which allows the container execute docker commands on the host. This is also possibly not required.....
+    restart: unless-stopped
+
+# I think I will need to combine ollama and openwebuis namespaces or create a bridge. Kinda like the idea of combining namesspaces tbh
   ollama:
     devices:
       - /dev/kfd:/dev/kfd
@@ -14,9 +28,11 @@ services:
     tty: true
     restart: unless-stopped
     image: ollama/ollama:${OLLAMA_DOCKER_TAG-rocm}
+    labels:
+      tsdproxy.enable: "true"
+      tsdproxy.name: "ollama"
     environment:
       - 'HSA_OVERRIDE_GFX_VERSION=10.3.0'
-    network_mode: service:ts-proxy # Share namespace with ts-proxy
 
   open-webui:
     build:
@@ -31,33 +47,21 @@ services:
     depends_on:
       - ollama
     environment:
-      - 'OLLAMA_BASE_URL=http://localhost:11434' # Due to us combinng the network namespace we can find ollama on localhost. Future versions may want to re-consider how we are running this, previously we used "ollama" as theservice name will automatically default to the dns name within the docker network as well
+      - 'OLLAMA_BASE_URL=http://ollama:11434' # Due to us combinng the network namespace we can find ollama on localhost. Future versions may want to re-consider how we are running this, previously we used "ollama" as theservice name will automatically default to the dns name within the docker network as well
       - 'WEBUI_SECRET_KEY=' # TODO: Must get this
-    restart: unless-stopped
-    network_mode: service:ts-proxy # Share namespace with ts-proxy
-
-  ts-proxy:
-    image: tailscale/tailscale:latest
-    container_name: ts-proxy
-    hostname: bleardai
-    environment:
-      - TS_AUTHKEY=${TS_AUTH_KEY} # Replace with your actual key. TODO: use .env file
-      - TS_STATE_DIR=/var/lib/tailscale
-      - TS_USERSPACE=false # Important for device mapping
-      #- TS_EXTRA_ARGS=--advertise-tags=tag:my-apps # Add tags as needed
-      - TS_SERVE_CONFIG=/config/tailscale_serve.json # Path to your serve config
-    volumes:
-      - tailscale_data:/var/lib/tailscale
-      - ${PWD}/ts_config:/config
-    devices: # TODO: Should this actually be in volumes?
-      - /dev/net/tun:/dev/net/tun
-    cap_add:
-      - NET_ADMIN   # TODO: Review both these entries
-      - sys_module  # Dont think I need this one in-particular
+    labels:
+      tsdproxy.enable: "true"
+      tsdproxy.name: "bleardai"
     restart: unless-stopped
 
-# Define data volumes - TODO: Is really this necessary?
+  ## PDF
+  stirling-pdf:
+    image: stirlingtools/stirling-pdf:latest
+    labels:
+      tsdproxy.enable: "true"
+      tsdproxy.name: "pdf"
+
 volumes:
   ollama: {}
   open-webui: {}
-  tailscale_data: {}
+  tsdproxydata:
